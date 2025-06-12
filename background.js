@@ -127,7 +127,7 @@ class OpenAIService {
 2. Mention something specific from their profile (experience, education, skills, or background)
 3. Explain why you want to connect (common interests, potential collaboration, learning opportunity, etc.)
 4. Be genuine and personalized, not generic
-5. Keep it under 300 characters to fit LinkedIn's limit
+5. Keep it under 200 characters to fit LinkedIn's limit
 6. Do not include brackets, placeholder text, or generic phrases like "I'd love to connect"
 
 Make it sound natural and authentic, like a real person reaching out with genuine interest.`;

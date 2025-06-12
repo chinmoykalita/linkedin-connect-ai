@@ -1,6 +1,16 @@
 class LinkedInProfileParser {
   constructor() {
     this.profileData = {};
+    // Cache for Voyager profile response to avoid repeated network calls
+    this.voyagerDataCache = null;
+    // Feature flag: fall back to LinkedIn Voyager API (beware of rate-limits)
+    this.useVoyagerFallback = true;
+    // Timestamp of the last full parse to throttle repeated parsing
+    this.lastParseAt = 0;
+    // Retry control for parsing loops
+    this.maxParseAttempts = 3;
+    this.parseAttempts = 0;
+    this.hasValidProfile = false;
     this.init();
   }
 
@@ -9,8 +19,8 @@ class LinkedInProfileParser {
     if (this.isProfilePage()) {
       console.log('LinkedIn Connect AI: This is a profile page, proceeding...');
       // Add delay to ensure page is fully loaded
-      setTimeout(() => {
-        this.parseProfile();
+      setTimeout(async () => {
+        await this.parseProfile();
         this.injectAIButton();
       }, 2000);
       this.observePageChanges();
@@ -24,7 +34,18 @@ class LinkedInProfileParser {
            !window.location.pathname.includes('/edit');
   }
 
-  parseProfile() {
+  async parseProfile() {
+    // If we already parsed successfully, no need to continue
+    if (this.hasValidProfile) return;
+
+    // Increment parse attempts and exit early if over limit
+    this.parseAttempts += 1;
+    if (this.parseAttempts > this.maxParseAttempts) {
+      console.warn('LinkedIn Connect AI: Max parse attempts reached. Stopping further parsing.');
+      if (this.pageObserver) this.pageObserver.disconnect();
+      return;
+    }
+
     const selectors = {
       name: 'h1.text-heading-xlarge',
       headline: '.text-body-medium.break-words',
@@ -46,7 +67,31 @@ class LinkedInProfileParser {
                      this.getTextContent('.pv-top-card-section__headline') ||
                      this.getTextContent('.pv-text-details__left-panel .text-body-medium');
 
-    const about = this.getAboutSection();
+    let about = this.getAboutSection();
+    let experience = this.getExperience();
+    let education = this.getEducation();
+
+    // Optional Voyager API fallback (disabled by default to avoid rate-limiting)
+    if (this.useVoyagerFallback && ((!about || about.length < 30) || experience.length === 0 || education.length === 0)) {
+      // Also use voyager fallback for education when none found via DOM
+      const needEducation = education.length === 0;
+      if (!this.voyagerDataCache) {
+        console.log('LinkedIn Connect AI: Falling back to Voyager API for missing data...');
+        this.voyagerDataCache = await this.fetchVoyagerProfile();
+      }
+      const voyagerData = this.voyagerDataCache;
+      if (voyagerData) {
+        if (!about || about.length < 30) {
+          about = this.extractSummaryFromVoyager(voyagerData) || about;
+        }
+        if (experience.length === 0) {
+          experience = this.extractExperienceFromVoyager(voyagerData);
+        }
+        if (needEducation) {
+          education = this.extractEducationFromVoyager(voyagerData);
+        }
+      }
+    }
 
     this.profileData = {
       name: name,
@@ -54,13 +99,19 @@ class LinkedInProfileParser {
       location: this.getTextContent(selectors.location),
       company: this.getTextContent(selectors.company),
       about: about,
-      experience: this.getExperience(),
-      education: this.getEducation(),
+      experience: experience,
+      education: education,
       skills: this.getSkills(),
       profileUrl: window.location.href
     };
 
     console.log('Parsed LinkedIn Profile:', this.profileData);
+
+    // If we now have a non-empty about section (summary) mark as valid and stop observing
+    if (this.profileData.about && this.profileData.about.length > 30) {
+      this.hasValidProfile = true;
+      if (this.pageObserver) this.pageObserver.disconnect();
+    }
   }
 
   getTextContent(selector) {
@@ -511,7 +562,7 @@ class LinkedInProfileParser {
       existingButton.remove();
     }
 
-    // Create the AI button with fixed positioning in top left corner
+    // Create the AI button with fixed positioning in top right corner
     const aiButton = document.createElement('button');
     aiButton.id = 'ai-connect-button';
     aiButton.className = 'artdeco-button artdeco-button--2 artdeco-button--primary ai-connect-btn-fixed';
@@ -521,11 +572,12 @@ class LinkedInProfileParser {
       </span>
     `;
     
-    // Apply fixed positioning styles - top left corner
+    // Apply fixed positioning styles - top right corner
     aiButton.style.cssText = `
       position: fixed !important;
       top: 20px !important;
-      left: 20px !important;
+      left: auto !important;
+      right: 20px !important;
       z-index: 9999 !important;
       background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
       border: none !important;
@@ -563,7 +615,7 @@ class LinkedInProfileParser {
 
     // Insert the button into the page
     document.body.appendChild(aiButton);
-    console.log('LinkedIn Connect AI: Fixed position button injected successfully at top left corner');
+    console.log('LinkedIn Connect AI: Fixed position button injected successfully at top right corner');
   }
 
   async handleAIConnect() {
@@ -708,45 +760,188 @@ class LinkedInProfileParser {
   }
 
   observePageChanges() {
-    const observer = new MutationObserver((mutations) => {
+    // Observe DOM mutations to re-parse when new content is inserted
+    this.pageObserver = new MutationObserver((mutations) => {
       const hasSignificantChanges = mutations.some(mutation => 
         mutation.type === 'childList' && mutation.addedNodes.length > 0
       );
-      
       if (hasSignificantChanges && this.isProfilePage()) {
-        setTimeout(() => {
-          this.parseProfile();
-          this.injectAIButton();
-        }, 2000);
+        const now = Date.now();
+        if (now - this.lastParseAt > 5000) {
+          this.lastParseAt = now;
+          setTimeout(async () => {
+            await this.parseProfile();
+            this.injectAIButton();
+          }, 500);
+        }
       }
     });
 
-    observer.observe(document.body, {
+    this.pageObserver.observe(document.body, {
       childList: true,
       subtree: true
     });
   }
+
+  /**
+   * Attempt to fetch profile details via LinkedIn's internal Voyager API.
+   * This call relies on the user being authenticated (cookies present).
+   */
+  async fetchVoyagerProfile() {
+    try {
+      const publicId = window.location.pathname.split('/in/')[1]?.split('/')[0];
+      if (!publicId) return null;
+
+      const csrf = this.getCsrfToken();
+      if (!csrf) {
+        console.warn('LinkedIn Connect AI: Unable to determine CSRF token for Voyager request');
+        return null;
+      }
+
+      const voyagerUrl = `https://www.linkedin.com/voyager/api/identity/profiles/${publicId}/profileView`;
+
+      const resp = await fetch(voyagerUrl, {
+        credentials: 'include',
+        headers: {
+          'accept': 'application/json',
+          'csrf-token': csrf,
+          'x-restli-protocol-version': '2.0.0'
+        }
+      });
+
+      if (!resp.ok) {
+        console.warn('LinkedIn Connect AI: Voyager request failed with status', resp.status);
+        return null;
+      }
+
+      const data = await resp.json();
+      return data;
+    } catch (err) {
+      console.error('LinkedIn Connect AI: Voyager fetch failed', err);
+      return null;
+    }
+  }
+
+  getCsrfToken() {
+    const match = document.cookie.match(/JSESSIONID\s*=\s*"?([^";]+)/);
+    // The cookie value already contains the required "ajax:" prefix (if any).
+    return match ? match[1] : '';
+  }
+
+  extractSummaryFromVoyager(vData) {
+    try {
+      return vData?.profileSummary?.text?.text || vData?.summary || '';
+    } catch {
+      return '';
+    }
+  }
+
+  extractExperienceFromVoyager(vData) {
+    const list = [];
+    const positions = vData?.positionView?.elements || [];
+    positions.slice(0, 3).forEach(pos => {
+      list.push({
+        title: pos?.title || '',
+        company: pos?.companyName || pos?.company?.name || 'Company not specified',
+        duration: this.formatVoyagerDuration(pos?.timePeriod) || 'Duration not specified',
+        description: pos?.description || ''
+      });
+    });
+    return list;
+  }
+
+  formatVoyagerDuration(tp) {
+    if (!tp || !tp.startDate) return '';
+    const monthNames = [
+      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    const start = `${monthNames[tp.startDate.month || 1]} ${tp.startDate.year}`;
+    const end = tp.endDate ? `${monthNames[tp.endDate.month || 1]} ${tp.endDate.year}` : 'Present';
+    return `${start} – ${end}`;
+  }
+
+  extractEducationFromVoyager(vData) {
+    try {
+      const list = [];
+      const educations = vData?.educationView?.elements || vData?.educations || [];
+      educations.slice(0, 3).forEach(ed => {
+        const degreeParts = [];
+        if (ed.degreeName) degreeParts.push(ed.degreeName);
+        if (ed.fieldOfStudy) degreeParts.push(ed.fieldOfStudy);
+        const degree = degreeParts.join(', ');
+        const year = ed.timePeriod ? this.formatVoyagerDuration(ed.timePeriod) : '';
+        list.push({
+          school: ed.schoolName || ed.school?.name || 'School not specified',
+          degree: degree || 'Degree not specified',
+          year: year
+        });
+      });
+      return list;
+    } catch {
+      return [];
+    }
+  }
 }
 
-// Initialize when the page loads
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    new LinkedInProfileParser();
-  });
-} else {
+// --- Initialization & SPA routing support ---
+
+function initLinkedInParser(force = false) {
+  const isProfile = window.location.pathname.startsWith('/in/');
+  if (!isProfile) return;
+
+  // Use a global flag to avoid spawning multiple parsers for same URL
+  const currentUrl = window.location.pathname;
+  if (!force && window.__aiLastProfileUrl === currentUrl) {
+    return;
+  }
+
+  window.__aiLastProfileUrl = currentUrl;
   new LinkedInProfileParser();
 }
 
-// Handle navigation in single-page application
-let lastUrl = location.href;
-new MutationObserver(() => {
-  const url = location.href;
-  if (url !== lastUrl) {
-    lastUrl = url;
-    setTimeout(() => {
-      if (document.querySelector('.text-heading-xlarge')) {
-        new LinkedInProfileParser();
-      }
-    }, 3000);
+// Backup observer: detect DOM insertions that include a profile heading and trigger parse if needed
+const urlDomObserver = new MutationObserver(() => {
+  if (window.location.pathname.startsWith('/in/')) {
+    initLinkedInParser();
   }
-}).observe(document, { subtree: true, childList: true }); 
+});
+
+urlDomObserver.observe(document.body, { childList: true, subtree: true });
+
+// Run on initial page load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initLinkedInParser);
+} else {
+  initLinkedInParser();
+}
+
+// Hook into History API to detect SPA navigations
+(function(history) {
+  const push = history.pushState;
+  const replace = history.replaceState;
+  function fire() {
+    window.dispatchEvent(new Event('locationchange'));
+  }
+  history.pushState = function() {
+    const ret = push.apply(this, arguments);
+    fire();
+    return ret;
+  };
+  history.replaceState = function() {
+    const ret = replace.apply(this, arguments);
+    fire();
+    return ret;
+  };
+})(window.history);
+
+window.addEventListener('popstate', () => {
+  window.dispatchEvent(new Event('locationchange'));
+});
+
+// Re-initialize parser on every location change
+window.addEventListener('locationchange', () => {
+  setTimeout(() => {
+    initLinkedInParser();
+  }, 1500); // small delay to allow new content load
+}); 
