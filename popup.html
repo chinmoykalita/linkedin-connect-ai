@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn Connect AI</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="popup-container">
+        <header class="popup-header">
+            <div class="logo">
+                <span class="logo-icon">🤖</span>
+                <h1>LinkedIn Connect AI</h1>
+            </div>
+        </header>
+        
+        <main class="popup-main">
+            <div class="config-section">
+                <h2>Configuration</h2>
+                
+                <div class="input-group">
+                    <label for="user-name">Your Name</label>
+                    <input 
+                        type="text" 
+                        id="user-name" 
+                        placeholder="Enter your name (e.g., John Smith)"
+                        autocomplete="name"
+                    >
+                    <small class="help-text">
+                        This will be used to personalize the AI-generated messages
+                    </small>
+                </div>
+
+                <div class="input-group">
+                    <label for="api-key">OpenAI API Key</label>
+                    <div class="input-container">
+                        <input 
+                            type="password" 
+                            id="api-key" 
+                            placeholder="Enter your OpenAI API key"
+                            autocomplete="off"
+                        >
+                        <button type="button" id="toggle-key" class="toggle-btn">👁️</button>
+                    </div>
+                    <small class="help-text">
+                        Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI Platform</a>
+                    </small>
+                </div>
+                
+                <button id="save-config" class="btn btn-primary">Save Configuration</button>
+            </div>
+            
+            <div class="status-section">
+                <div id="status-message" class="status-message"></div>
+            </div>
+            
+            <div class="usage-section">
+                <h3>How to Use</h3>
+                <ol>
+                    <li>Enter your OpenAI API key above</li>
+                    <li>Visit any LinkedIn profile</li>
+                    <li>Click the "🤖 AI Connect" button</li>
+                    <li>Review and customize the generated message</li>
+                    <li>Send your connection request!</li>
+                </ol>
+            </div>
+            
+            <div class="info-section">
+                <h3>Features</h3>
+                <ul>
+                    <li>✨ AI-powered personalized messages</li>
+                    <li>🎯 Analyzes profile data automatically</li>
+                    <li>⚡ Works on any LinkedIn profile</li>
+                    <li>🔒 Secure API key storage</li>
+                    <li>📝 Editable messages before sending</li>
+                </ul>
+            </div>
+        </main>
+        
+        <footer class="popup-footer">
+            <p>Made with ❤️ for better networking</p>
+        </footer>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html> 

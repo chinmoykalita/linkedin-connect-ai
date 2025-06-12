@@ -1,0 +1,301 @@
+/* LinkedIn Connect AI Content Script Styles */
+
+/* Fixed position AI Connect button - always top left corner */
+.ai-connect-btn-fixed {
+    position: fixed !important;
+    top: 20px !important;
+    left: 20px !important;
+    z-index: 9999 !important;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+    border: none !important;
+    color: white !important;
+    font-weight: 500 !important;
+    padding: 8px 16px !important;
+    border-radius: 24px !important;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3) !important;
+    transition: all 0.3s ease !important;
+    cursor: pointer !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    font-size: 14px !important;
+    min-width: auto !important;
+    height: auto !important;
+    opacity: 0.9 !important;
+}
+
+.ai-connect-btn-fixed:hover {
+    transform: translateY(-2px) scale(1.05) !important;
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4) !important;
+    opacity: 1 !important;
+}
+
+.ai-connect-btn-fixed:disabled {
+    opacity: 0.7 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+}
+
+.ai-connect-btn {
+    margin-left: 8px !important;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+    border: none !important;
+    color: white !important;
+    font-weight: 500 !important;
+    transition: all 0.3s ease !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.ai-connect-btn:hover {
+    background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
+}
+
+.ai-connect-btn:disabled {
+    opacity: 0.7 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+}
+
+.ai-connect-btn .artdeco-button__text {
+    position: relative !important;
+    z-index: 1 !important;
+}
+
+/* Modal Overlay */
+.ai-modal-overlay {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: rgba(0, 0, 0, 0.6) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 9999 !important;
+    backdrop-filter: blur(4px) !important;
+}
+
+/* Modal Content */
+.ai-modal-content {
+    background: white !important;
+    border-radius: 12px !important;
+    width: 90% !important;
+    max-width: 500px !important;
+    max-height: 80vh !important;
+    overflow: hidden !important;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25) !important;
+    animation: modalSlideIn 0.3s ease !important;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-30px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Modal Header */
+.ai-modal-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 20px 24px !important;
+    background: linear-gradient(135deg, #0077b5 0%, #005885 100%) !important;
+    color: white !important;
+}
+
+.ai-modal-header h3 {
+    margin: 0 !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+}
+
+.ai-modal-close {
+    background: none !important;
+    border: none !important;
+    color: white !important;
+    font-size: 24px !important;
+    cursor: pointer !important;
+    padding: 4px 8px !important;
+    border-radius: 4px !important;
+    transition: background-color 0.2s ease !important;
+}
+
+.ai-modal-close:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Modal Body */
+.ai-modal-body {
+    padding: 24px !important;
+}
+
+.ai-message-textarea {
+    width: 100% !important;
+    border: 2px solid #e1e5e9 !important;
+    border-radius: 8px !important;
+    padding: 12px !important;
+    font-size: 14px !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    line-height: 1.5 !important;
+    resize: vertical !important;
+    min-height: 120px !important;
+    transition: border-color 0.3s ease !important;
+}
+
+.ai-message-textarea:focus {
+    outline: none !important;
+    border-color: #0077b5 !important;
+    box-shadow: 0 0 0 3px rgba(0, 119, 181, 0.1) !important;
+}
+
+/* Modal Actions */
+.ai-modal-actions {
+    display: flex !important;
+    gap: 12px !important;
+    margin-top: 20px !important;
+}
+
+.ai-btn {
+    padding: 10px 20px !important;
+    border: none !important;
+    border-radius: 6px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+    flex: 1 !important;
+}
+
+.ai-btn-secondary {
+    background: #f3f4f6 !important;
+    color: #374151 !important;
+    border: 1px solid #d1d5db !important;
+}
+
+.ai-btn-secondary:hover {
+    background: #e5e7eb !important;
+    transform: translateY(-1px) !important;
+}
+
+.ai-btn-primary {
+    background: linear-gradient(135deg, #0077b5 0%, #005885 100%) !important;
+    color: white !important;
+}
+
+.ai-btn-primary:hover {
+    background: linear-gradient(135deg, #005885 0%, #004066 100%) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(0, 119, 181, 0.3) !important;
+}
+
+/* Error Message */
+.ai-error-message {
+    position: fixed !important;
+    top: 20px !important;
+    right: 20px !important;
+    background: #fee2e2 !important;
+    color: #991b1b !important;
+    padding: 12px 16px !important;
+    border-radius: 8px !important;
+    border: 1px solid #fca5a5 !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    z-index: 10000 !important;
+    max-width: 300px !important;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
+    animation: errorSlideIn 0.3s ease !important;
+}
+
+@keyframes errorSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Success Message */
+.ai-success-message {
+    position: fixed !important;
+    top: 20px !important;
+    right: 20px !important;
+    background: #d1fae5 !important;
+    color: #065f46 !important;
+    padding: 12px 16px !important;
+    border-radius: 8px !important;
+    border: 1px solid #a7f3d0 !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    z-index: 10000 !important;
+    max-width: 300px !important;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
+    animation: successSlideIn 0.3s ease !important;
+}
+
+@keyframes successSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Loading animation for the AI button */
+.ai-connect-btn .loading {
+    animation: pulse 1.5s ease-in-out infinite !important;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+/* Responsive design for smaller screens */
+@media (max-width: 768px) {
+    .ai-modal-content {
+        width: 95% !important;
+        margin: 20px !important;
+    }
+    
+    .ai-modal-actions {
+        flex-direction: column !important;
+    }
+    
+    .ai-connect-btn {
+        margin-left: 4px !important;
+        margin-top: 8px !important;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .ai-connect-btn {
+        background: #000 !important;
+        color: #fff !important;
+        border: 2px solid #fff !important;
+    }
+    
+    .ai-modal-content {
+        border: 2px solid #000 !important;
+    }
+} 
