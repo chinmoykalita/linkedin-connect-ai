@@ -21,7 +21,18 @@ class LinkedInProfileParser {
       // Add delay to ensure page is fully loaded
       setTimeout(async () => {
         await this.parseProfile();
-        this.injectAIButton();
+        // Compute Connect Score and display panel
+        try {
+          const result = await chrome.runtime.sendMessage({
+            action: 'scoreProfile',
+            profileData: this.profileData
+          });
+          if (result && result.success) {
+            this.injectScorePanel(result.score, result.reasons);
+          }
+        } catch (err) {
+          console.warn('Unable to compute profile score:', err);
+        }
       }, 2000);
       this.observePageChanges();
     } else {
@@ -71,9 +82,7 @@ class LinkedInProfileParser {
     let experience = this.getExperience();
     let education = this.getEducation();
 
-    // Optional Voyager API fallback (disabled by default to avoid rate-limiting)
     if (this.useVoyagerFallback && ((!about || about.length < 30) || experience.length === 0 || education.length === 0)) {
-      // Also use voyager fallback for education when none found via DOM
       const needEducation = education.length === 0;
       if (!this.voyagerDataCache) {
         console.log('LinkedIn Connect AI: Falling back to Voyager API for missing data...');
@@ -107,10 +116,21 @@ class LinkedInProfileParser {
 
     console.log('Parsed LinkedIn Profile:', this.profileData);
 
-    // If we now have a non-empty about section (summary) mark as valid and stop observing
     if (this.profileData.about && this.profileData.about.length > 30) {
       this.hasValidProfile = true;
       if (this.pageObserver) this.pageObserver.disconnect();
+    }
+
+    try {
+      const res = await chrome.runtime.sendMessage({
+        action: 'scoreProfile',
+        profileData: this.profileData
+      });
+      if (res && res.success) {
+        this.injectScorePanel(res.score, res.reasons);
+      }
+    } catch (e) {
+      console.warn('Score recompute failed', e);
     }
   }
 
@@ -120,36 +140,28 @@ class LinkedInProfileParser {
   }
 
   getAboutSection() {
-    // Enhanced about section parsing with more comprehensive selectors
     const aboutSelectors = [
-      // Modern LinkedIn selectors
       '.pv-shared-text-with-see-more .full-text',
       '.pv-shared-text-with-see-more .inline-show-more-text span[aria-hidden="true"]',
       '.pv-shared-text-with-see-more .visually-hidden',
       
-      // Section-based selectors
       '#about ~ .pvs-list__container .full-text',
       '#about ~ .pvs-list__container .inline-show-more-text span[aria-hidden="true"]',
       '#about ~ .pvs-list__container .break-words span[aria-hidden="true"]',
       
-      // Alternative about selectors
       '.pv-about-section .pv-about__summary-text .lt-line-clamp__raw-line',
       '.pv-about-section .inline-show-more-text span[aria-hidden="true"]',
       
-      // Data attribute selectors
       '[data-field="summary_expanded"] .inline-show-more-text span[aria-hidden="true"]',
       '[data-field="summary_expanded"] .full-text',
       
-      // Voyager selectors
       '.pv-text-details__left-panel .pv-shared-text-with-see-more',
       '.pvs-header + div .inline-show-more-text span[aria-hidden="true"]',
       
-      // New selectors for better bio extraction
       'section[data-section="summary"] .inline-show-more-text span[aria-hidden="true"]',
       'section[data-section="summary"] .full-text',
       '.pv-profile-section__card-action-bar ~ .pv-shared-text-with-see-more span[aria-hidden="true"]',
       
-      // Additional fallback selectors
       '.pvs-list__outer-container .break-words span[aria-hidden="true"]',
       '.profile-section-card .pv-shared-text-with-see-more span[aria-hidden="true"]'
     ];
@@ -160,7 +172,6 @@ class LinkedInProfileParser {
       const element = document.querySelector(selector);
       if (element && element.textContent.trim()) {
         const text = element.textContent.trim();
-        // Filter out short or irrelevant text
         if (text.length > 30 && !this.isIrrelevantText(text)) {
           console.log('LinkedIn Connect AI: Found about text with selector:', selector);
           return text;
@@ -168,15 +179,12 @@ class LinkedInProfileParser {
       }
     }
 
-    // More comprehensive fallback search
     const aboutSection = document.querySelector('#about');
     if (aboutSection) {
       console.log('LinkedIn Connect AI: Found about section, searching for text...');
       
-      // Look in the next sibling or parent section
       const parentSection = aboutSection.closest('section') || aboutSection.parentElement;
       if (parentSection) {
-        // Try various text containers
         const textSelectors = [
           '.inline-show-more-text span[aria-hidden="true"]',
           '.full-text',
@@ -200,17 +208,14 @@ class LinkedInProfileParser {
       }
     }
 
-    // Enhanced last resort: search for meaningful biographical text
     const allSpans = document.querySelectorAll('span[aria-hidden="true"]');
     const potentialBios = [];
     
     for (const span of allSpans) {
       const text = span.textContent.trim();
       if (text.length > 50 && text.length < 1000 && !this.isIrrelevantText(text)) {
-        // Check if this span is in a reasonable location (not in header/footer)
         const rect = span.getBoundingClientRect();
         if (rect.top > 200 && rect.top < window.innerHeight - 200) {
-          // Score the text based on biographical indicators
           const bioScore = this.calculateBioScore(text);
           if (bioScore > 3) {
             potentialBios.push({ text, score: bioScore });
@@ -219,7 +224,6 @@ class LinkedInProfileParser {
       }
     }
     
-    // Return the highest scoring bio text
     if (potentialBios.length > 0) {
       potentialBios.sort((a, b) => b.score - a.score);
       console.log('LinkedIn Connect AI: Found potential bio with scoring method');
@@ -230,7 +234,6 @@ class LinkedInProfileParser {
     return '';
   }
 
-  // Helper function to identify irrelevant text
   isIrrelevantText(text) {
     const irrelevantPatterns = [
       /^\d+\s*(followers?|connections?)/i,
@@ -250,12 +253,10 @@ class LinkedInProfileParser {
     return irrelevantPatterns.some(pattern => pattern.test(text.toLowerCase()));
   }
 
-  // Helper function to score biographical text
   calculateBioScore(text) {
     let score = 0;
     const lowerText = text.toLowerCase();
     
-    // Positive indicators
     const positiveWords = [
       'passionate', 'experienced', 'dedicated', 'focused', 'specialized',
       'expertise', 'professional', 'years', 'background', 'skills',
@@ -267,13 +268,11 @@ class LinkedInProfileParser {
       if (lowerText.includes(word)) score += 1;
     });
     
-    // First person indicators
     const firstPersonWords = ['i am', 'i have', 'i work', 'i love', 'my experience', 'my passion'];
     firstPersonWords.forEach(phrase => {
       if (lowerText.includes(phrase)) score += 2;
     });
     
-    // Professional terms
     const professionalTerms = [
       'ceo', 'cto', 'manager', 'director', 'engineer', 'developer',
       'consultant', 'analyst', 'specialist', 'coordinator', 'lead'
@@ -288,7 +287,6 @@ class LinkedInProfileParser {
   getExperience() {
     console.log('LinkedIn Connect AI: Parsing experience section...');
     
-    // Multiple selectors for experience entries
     const experienceSelectors = [
       '#experience ~ .pvs-list__paged-list-item',
       '#experience ~ .pvs-list .pvs-list__paged-list-item',
@@ -310,9 +308,8 @@ class LinkedInProfileParser {
     const experiences = [];
     
     experienceElements.forEach((element, index) => {
-      if (index >= 5) return; // Limit to top 5 experiences
+      if (index >= 5) return;
       
-      // Multiple selectors for job title
       const titleSelectors = [
         '.mr1.hoverable-link-text.t-bold span[aria-hidden="true"]',
         '.display-flex.align-items-center .mr1.t-bold span[aria-hidden="true"]',
@@ -330,7 +327,6 @@ class LinkedInProfileParser {
         }
       }
       
-      // Multiple selectors for company
       const companySelectors = [
         '.t-14.t-normal span[aria-hidden="true"]',
         '.pv-entity__secondary-title span[aria-hidden="true"]',
@@ -343,7 +339,6 @@ class LinkedInProfileParser {
         const companyElements = element.querySelectorAll(companySelector);
         for (const companyElement of companyElements) {
           const text = companyElement.textContent.trim();
-          // Skip duration text and look for actual company names
           if (text && !this.isDurationText(text) && !this.isLocationText(text)) {
             company = text;
             break;
@@ -352,7 +347,6 @@ class LinkedInProfileParser {
         if (company) break;
       }
       
-      // Multiple selectors for duration
       const durationSelectors = [
         '.pvs-entity__caption-wrapper span[aria-hidden="true"]',
         '.t-12.t-black--light span[aria-hidden="true"]',
@@ -372,7 +366,6 @@ class LinkedInProfileParser {
         }
       }
       
-      // Extract job description if available
       const descriptionSelectors = [
         '.inline-show-more-text--is-expanded span[aria-hidden="true"]',
         '.pv-shared-text-with-see-more span[aria-hidden="true"]',
@@ -403,13 +396,12 @@ class LinkedInProfileParser {
     });
     
     console.log(`LinkedIn Connect AI: Found ${experiences.length} total experiences`);
-    return experiences.slice(0, 3); // Return top 3 experiences
+    return experiences.slice(0, 3);
   }
 
   getEducation() {
     console.log('LinkedIn Connect AI: Parsing education section...');
     
-    // Multiple selectors for education entries
     const educationSelectors = [
       '#education ~ .pvs-list__paged-list-item',
       '#education ~ .pvs-list .pvs-list__paged-list-item',
@@ -431,9 +423,8 @@ class LinkedInProfileParser {
     const education = [];
     
     educationElements.forEach((element, index) => {
-      if (index >= 3) return; // Limit to top 3 education entries
+      if (index >= 3) return;
       
-      // Multiple selectors for school name
       const schoolSelectors = [
         '.mr1.hoverable-link-text.t-bold span[aria-hidden="true"]',
         '.display-flex.align-items-center .mr1.t-bold span[aria-hidden="true"]',
@@ -450,7 +441,6 @@ class LinkedInProfileParser {
         }
       }
       
-      // Multiple selectors for degree
       const degreeSelectors = [
         '.t-14.t-normal span[aria-hidden="true"]',
         '.pv-entity__degree-name span[aria-hidden="true"]',
@@ -463,7 +453,6 @@ class LinkedInProfileParser {
         const degreeElement = element.querySelector(degreeSelector);
         if (degreeElement && degreeElement.textContent.trim()) {
           const text = degreeElement.textContent.trim();
-          // Skip dates and other irrelevant text
           if (!this.isDurationText(text) && !this.isLocationText(text)) {
             degree = text;
             break;
@@ -471,7 +460,6 @@ class LinkedInProfileParser {
         }
       }
       
-      // Extract graduation year if available
       const yearSelectors = [
         '.pvs-entity__caption-wrapper span[aria-hidden="true"]',
         '.t-12.t-black--light span[aria-hidden="true"]',
@@ -501,10 +489,9 @@ class LinkedInProfileParser {
     });
     
     console.log(`LinkedIn Connect AI: Found ${education.length} total education entries`);
-    return education.slice(0, 2); // Return top 2 education entries
+    return education.slice(0, 2);
   }
 
-  // Helper function to identify duration text
   isDurationText(text) {
     const durationPatterns = [
       /\d+\s*years?\s*\d*\s*months?/i,
@@ -519,7 +506,6 @@ class LinkedInProfileParser {
     return durationPatterns.some(pattern => pattern.test(text));
   }
 
-  // Helper function to identify year text
   isYearText(text) {
     const yearPatterns = [
       /\d{4}/,
@@ -531,10 +517,9 @@ class LinkedInProfileParser {
     return yearPatterns.some(pattern => pattern.test(text));
   }
 
-  // Helper function to identify location text
   isLocationText(text) {
     const locationPatterns = [
-      /,\s*[A-Z]{2}$/i, // Ends with state abbreviation
+      /,\s*[A-Z]{2}$/i,
       /,\s*[A-Za-z\s]+$/i, // Ends with location
       /(united states|usa|uk|canada|australia)/i,
       /(remote|hybrid)/i
@@ -555,208 +540,85 @@ class LinkedInProfileParser {
     return skills.slice(0, 10); // Get top 10 skills
   }
 
-  injectAIButton() {
-    // Remove existing button if present
-    const existingButton = document.querySelector('#ai-connect-button');
-    if (existingButton) {
-      existingButton.remove();
-    }
+  injectScorePanel(score, reasons = []) {
+    // Remove existing if any
+    const existing = document.querySelector('#ai-connect-score');
+    if (existing) existing.remove();
 
-    // Create the AI button with fixed positioning in top right corner
-    const aiButton = document.createElement('button');
-    aiButton.id = 'ai-connect-button';
-    aiButton.className = 'artdeco-button artdeco-button--2 artdeco-button--primary ai-connect-btn-fixed';
-    aiButton.innerHTML = `
-      <span class="artdeco-button__text">
-        🤖 AI Connect
-      </span>
-    `;
-    
-    // Apply fixed positioning styles - top right corner
-    aiButton.style.cssText = `
+    const panel = document.createElement('div');
+    panel.id = 'ai-connect-score';
+    panel.style.cssText = `
       position: fixed !important;
-      top: 20px !important;
-      left: auto !important;
+      top: 80px !important;
       right: 20px !important;
       z-index: 9999 !important;
-      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
-      border: none !important;
-      color: white !important;
-      font-weight: 500 !important;
-      padding: 8px 16px !important;
-      border-radius: 24px !important;
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3) !important;
-      transition: all 0.3s ease !important;
-      cursor: pointer !important;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-      font-size: 14px !important;
-      min-width: auto !important;
-      height: auto !important;
-      opacity: 0.9 !important;
+      background: white !important;
+      border-radius: 12px !important;
+      padding: 12px 16px !important;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+      font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif !important;
+      width: 260px !important;
     `;
-    
-    // Add hover effects
-    aiButton.addEventListener('mouseenter', () => {
-      aiButton.style.transform = 'translateY(-2px) scale(1.05)';
-      aiButton.style.boxShadow = '0 6px 20px rgba(99, 102, 241, 0.4)';
-      aiButton.style.opacity = '1';
-    });
-    
-    aiButton.addEventListener('mouseleave', () => {
-      aiButton.style.transform = 'translateY(0) scale(1)';
-      aiButton.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.3)';
-      aiButton.style.opacity = '0.9';
-    });
-    
-    aiButton.addEventListener('click', (e) => {
-      e.preventDefault();
-      this.handleAIConnect();
-    });
 
-    // Insert the button into the page
-    document.body.appendChild(aiButton);
-    console.log('LinkedIn Connect AI: Fixed position button injected successfully at top right corner');
-  }
+    // Color indicator based on score
+    const color = score >= 80 ? '#16a34a' : score >= 50 ? '#d97706' : '#dc2626';
 
-  async handleAIConnect() {
-    const button = document.querySelector('#ai-connect-button');
-    const originalText = button.innerHTML;
-    
-    button.innerHTML = '<span class="artdeco-button__text">🤖 Generating...</span>';
-    button.disabled = true;
-
-    try {
-      // Send profile data to background script
-      const response = await chrome.runtime.sendMessage({
-        action: 'generateMessage',
-        profileData: this.profileData
-      });
-
-      if (response.success) {
-        this.showMessageModal(response.message);
-      } else {
-        this.showError(response.error);
-      }
-    } catch (error) {
-      console.error('Error generating message:', error);
-      this.showError('Failed to generate message. Please try again.');
-    } finally {
-      button.innerHTML = originalText;
-      button.disabled = false;
-    }
-  }
-
-  showMessageModal(message) {
-    // Remove existing modal if present
-    const existingModal = document.querySelector('#ai-message-modal');
-    if (existingModal) {
-      existingModal.remove();
-    }
-
-    const modal = document.createElement('div');
-    modal.id = 'ai-message-modal';
-    modal.className = 'ai-modal-overlay';
-    modal.innerHTML = `
-      <div class="ai-modal-content">
-        <div class="ai-modal-header">
-          <h3>AI Generated Connection Message</h3>
-          <button class="ai-modal-close">&times;</button>
-        </div>
-        <div class="ai-modal-body">
-          <textarea class="ai-message-textarea" rows="6">${message}</textarea>
-          <div class="ai-modal-actions">
-            <button class="ai-btn ai-btn-secondary" id="copy-message">Copy Message</button>
-            <button class="ai-btn ai-btn-primary" id="send-connect">Send Connect Request</button>
-          </div>
-        </div>
+    panel.innerHTML = `
+      <h4 style="margin:0 0 8px 0;font-size:15px;font-weight:600;color:#2d3748;">Connect Score</h4>
+      <div style="font-size:32px;font-weight:700;color:${color};text-align:left;">${score}</div>
+      <ul style="margin-top:8px;font-size:13px;color:#4b5563;list-style:disc;padding-left:20px;max-height:120px;overflow:auto;">
+        ${reasons.map(r => `<li>${r}</li>`).join('')}
+      </ul>
+      <button id="ai-generate-note-btn" style="margin-top:10px;padding:8px 12px;background:#0077b5;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;width:100%;">Generate Message</button>
+      <div id="ai-note-container" style="display:none;margin-top:8px;">
+        <textarea id="ai-generated-note" readonly style="width:100%;min-height:100px;border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:13px;resize:vertical;"></textarea>
+        <button id="ai-copy-note-btn" style="margin-top:6px;padding:6px 10px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;font-size:13px;width:100%;">Copy</button>
       </div>
     `;
 
-    document.body.appendChild(modal);
+    // Attach listeners after insertion
+    document.body.appendChild(panel);
 
-    // Event listeners
-    modal.querySelector('.ai-modal-close').addEventListener('click', () => {
-      modal.remove();
-    });
+    const generateBtn = panel.querySelector('#ai-generate-note-btn');
+    const noteContainer = panel.querySelector('#ai-note-container');
+    const noteTextarea = panel.querySelector('#ai-generated-note');
+    const copyBtn = panel.querySelector('#ai-copy-note-btn');
 
-    modal.querySelector('#copy-message').addEventListener('click', () => {
-      const textarea = modal.querySelector('.ai-message-textarea');
-      textarea.select();
-      document.execCommand('copy');
-      
-      const copyBtn = modal.querySelector('#copy-message');
-      const originalText = copyBtn.textContent;
-      copyBtn.textContent = 'Copied!';
-      setTimeout(() => {
-        copyBtn.textContent = originalText;
-      }, 2000);
-    });
+    generateBtn.addEventListener('click', async () => {
+      generateBtn.disabled = true;
+      const originalText = generateBtn.textContent;
+      generateBtn.textContent = 'Generating...';
 
-    modal.querySelector('#send-connect').addEventListener('click', () => {
-      const customMessage = modal.querySelector('.ai-message-textarea').value;
-      this.sendConnectionRequest(customMessage);
-      modal.remove();
-    });
+      try {
+        const resp = await chrome.runtime.sendMessage({
+          action: 'generateMessage',
+          profileData: this.profileData
+        });
 
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        modal.remove();
+        if (resp && resp.success) {
+          noteTextarea.value = resp.message;
+          noteContainer.style.display = 'block';
+          generateBtn.textContent = 'Regenerate';
+        } else {
+          generateBtn.textContent = 'Error – Retry';
+        }
+      } catch (err) {
+        console.error('Generate message failed', err);
+        generateBtn.textContent = 'Error – Retry';
+      } finally {
+        generateBtn.disabled = false;
       }
     });
-  }
 
-  sendConnectionRequest(message) {
-    // Click the original LinkedIn connect button and attempt to add the message
-    const connectButton = document.querySelector('button[aria-label*="Connect"]') ||
-                         document.querySelector('button[aria-label*="Invite"]') ||
-                         document.querySelector('.artdeco-button--primary[aria-label*="Connect"]');
-    
-    if (connectButton) {
-      connectButton.click();
-      
-      // Wait for the modal to appear and inject the message
-      setTimeout(() => {
-        const messageTextarea = document.querySelector('textarea[name="message"]') ||
-                               document.querySelector('#custom-message') ||
-                               document.querySelector('textarea[id*="message"]') ||
-                               document.querySelector('.connect-button-send-invite__custom-message textarea');
-        
-        if (messageTextarea) {
-          messageTextarea.value = message;
-          messageTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-          messageTextarea.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }, 1000);
-    } else {
-      // Fallback: just copy the message to clipboard
-      navigator.clipboard.writeText(message).then(() => {
-        this.showSuccessMessage('Message copied to clipboard! Use it when sending your connection request.');
-      });
-    }
-  }
+    copyBtn.addEventListener('click', () => {
+      noteTextarea.select();
+      document.execCommand('copy');
+      const original = copyBtn.textContent;
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => copyBtn.textContent = original, 2000);
+    });
 
-  showSuccessMessage(message) {
-    const successDiv = document.createElement('div');
-    successDiv.className = 'ai-success-message';
-    successDiv.textContent = message;
-    
-    document.body.appendChild(successDiv);
-    
-    setTimeout(() => {
-      successDiv.remove();
-    }, 4000);
-  }
-
-  showError(errorMessage) {
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'ai-error-message';
-    errorDiv.textContent = errorMessage;
-    
-    document.body.appendChild(errorDiv);
-    
-    setTimeout(() => {
-      errorDiv.remove();
-    }, 5000);
+    return; // panel already appended above
   }
 
   observePageChanges() {
@@ -771,7 +633,6 @@ class LinkedInProfileParser {
           this.lastParseAt = now;
           setTimeout(async () => {
             await this.parseProfile();
-            this.injectAIButton();
           }, 500);
         }
       }

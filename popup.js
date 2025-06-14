@@ -2,6 +2,7 @@ class PopupManager {
     constructor() {
         this.userNameInput = document.getElementById('user-name');
         this.apiKeyInput = document.getElementById('api-key');
+        this.objectiveInput = document.getElementById('objective');
         this.toggleBtn = document.getElementById('toggle-key');
         this.saveBtn = document.getElementById('save-config');
         this.statusMessage = document.getElementById('status-message');
@@ -31,12 +32,23 @@ class PopupManager {
             this.clearStatus();
         });
 
+        this.objectiveInput.addEventListener('input', () => {
+            this.clearStatus();
+        });
+
         [this.userNameInput, this.apiKeyInput].forEach(input => {
             input.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
                     this.saveConfiguration();
                 }
             });
+        });
+
+        // Allow Enter key on objective input to save
+        this.objectiveInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.saveConfiguration();
+            }
         });
     }
 
@@ -53,7 +65,10 @@ class PopupManager {
                 if (response.userName) {
                     this.userNameInput.value = response.userName;
                 }
-                if (response.apiKey || response.userName) {
+                if (response.objective) {
+                    this.objectiveInput.value = response.objective;
+                }
+                if (response.apiKey || response.userName || response.objective) {
                     this.showStatus('Configuration loaded successfully', 'success');
                 }
             }
@@ -71,6 +86,7 @@ class PopupManager {
     async saveConfiguration() {
         const userName = this.userNameInput.value.trim();
         const apiKey = this.apiKeyInput.value.trim();
+        const objective = this.objectiveInput.value.trim();
         
         if (!userName) {
             this.showStatus('Please enter your name', 'error');
@@ -79,6 +95,11 @@ class PopupManager {
 
         if (!apiKey) {
             this.showStatus('Please enter your OpenAI API key', 'error');
+            return;
+        }
+
+        if (!objective) {
+            this.showStatus('Please enter your networking objective', 'error');
             return;
         }
 
@@ -96,7 +117,8 @@ class PopupManager {
             const response = await chrome.runtime.sendMessage({
                 action: 'setConfiguration',
                 userName: userName,
-                apiKey: apiKey
+                apiKey: apiKey,
+                objective: objective
             });
 
             console.log('Save response:', response);
@@ -132,7 +154,8 @@ class PopupManager {
             try {
                 await chrome.storage.local.set({ 
                     openaiApiKey: apiKey,
-                    userName: userName 
+                    userName: userName,
+                    objective: objective
                 });
                 this.showStatus('Configuration saved to local storage as fallback!', 'success');
             } catch (fallbackError) {

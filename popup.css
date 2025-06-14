@@ -114,6 +114,22 @@ body {
     background: white;
 }
 
+#objective {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e0e6ed;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+    background: #f8fafc;
+}
+
+#objective:focus {
+    outline: none;
+    border-color: #0077b5;
+    background: white;
+}
+
 .toggle-btn {
     position: absolute;
     right: 8px;
